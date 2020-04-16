@@ -41,7 +41,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: build
-        run: wasm-pack build --release --target ${{ matrix.config.target }} wallet-js
+        run: wasm-pack build --release --target ${{ matrix.target }} wallet-js
 
       - name: pack
         run: wasm-pack pack ./wallet-js
