@@ -46,6 +46,11 @@ jobs:
       - name: pack
         run: wasm-pack pack ./wallet-js
 
+      - name: Get tag version
+        id: get_version
+        run: echo ::set-output name=VERSION::``${GITHUB_REF#refs/tags/}``
+        shell: bash
+
       - name: rename-tarball
         run: find ./wallet-js/pkg -name wallet-js*.tgz -exec mv {} chain-wallet-libs-${{ steps.get_version.outputs.VERSION }}.tgz \;
 
