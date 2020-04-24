@@ -272,7 +272,7 @@ jobs:
           name: jniLibs
 
       - name: make libs directory
-        run: mkdir -p bindings/wallet-cordova-src/android/libs
+        run: mkdir -p bindings/wallet-cordova/src/android/libs
 
       - name: Copy libs
         run: cp jniLibs/* bindings/wallet-cordova/src/android/libs
