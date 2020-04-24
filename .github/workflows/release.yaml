@@ -275,7 +275,7 @@ jobs:
         run: mkdir -p bindings/wallet-cordova/src/android/libs
 
       - name: Copy libs
-        run: cp jniLibs/* bindings/wallet-cordova/src/android/libs
+        run: cp -r jniLibs/* bindings/wallet-cordova/src/android/libs
 
       - name: rename amd64-v8a 
         working-directory: ./bindings/wallet-cordova/src/android/libs
