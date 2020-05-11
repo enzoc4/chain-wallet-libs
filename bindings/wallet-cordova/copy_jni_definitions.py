@@ -7,18 +7,22 @@ import shutil
 
 script_directory = Path(__file__).parent
 
+
 def run():
+    print(__file__)
     # copy java definitions from jni directory
 
     package_path = Path("com/iohk/jormungandrwallet")
 
-    src_files = (script_directory.parent / "wallet-jni" /
-                 "java" / "com" / "iohk" / "jormungandrwallet").glob("*java")
+    src = (script_directory.parent / "wallet-jni" /
+           "java" / "com" / "iohk" / "jormungandrwallet")
+    src_files = src.glob("*java")
 
     dst = script_directory / Path("src/android/jormungandrwallet")
     dst.mkdir(parents=True, exist_ok=True)
 
     print("Copy java definitions from jni directory")
+    print(f"source: {src}")
     print(f"destination: {dst}")
 
     for file in src_files:
