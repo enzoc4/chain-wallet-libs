@@ -65,3 +65,29 @@ jobs:
           use-cross: ${{ matrix.config.cross }}
           command: rustc
           args: --release --target ${{ matrix.config.target }} -p jormungandrwallet -- -C lto
+
+
+  build_lipo_asset:
+    name: Build universal lib for cordova plugin
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          default: true
+
+      - run: rustup target add x86_64-apple-ios
+      - run: rustup target add aarch64-apple-ios
+
+      - name: Checkout code
+        uses: actions/checkout@v1
+        with:
+          submodules: true
+
+      - name: build universal lib 
+        working-directory: ./bindings/wallet-cordova
+        run: python3 ./build_ios.py 
