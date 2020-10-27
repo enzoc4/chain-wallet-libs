@@ -37,6 +37,13 @@ def compile_jni():
 
 
 def run():
+    print("DIRECTORIES")
+    print(scriptdirectory)
+    print(rootdirectory)
+    print(dynlibdirectory)
+    print(Path(__file__))
+    exit(1)
+
     compile_java_classes()
     compile_jni()
 
