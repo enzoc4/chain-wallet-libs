@@ -50,12 +50,12 @@ def run():
     compile_java_classes()
     compile_jni()
 
-    subprocess.run(["ls", dynlibdirectory], cwd=scriptdirectory)
     subprocess.run(["ls", dynlibdirectory])
+    subprocess.run(["ls", dynlibdirectory.resolve()])
     subprocess.run(["pwd"])
 
     out = subprocess.run([
-        "java", f"-Djava.library.path={dynlibdirectory}", "-cp", classpath, "org.junit.runner.JUnitCore", "WalletTest"
+        "java", f"-Djava.library.path={dynlibdirectory.resolve()}", "-cp", classpath, "org.junit.runner.JUnitCore", "WalletTest"
     ], cwd=scriptdirectory)
 
     if out.returncode != 0:
