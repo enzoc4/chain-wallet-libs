@@ -167,6 +167,8 @@ jobs:
         with:
           toolchain: stable
 
+      run: ls ./bindings/wallet-jni/java/com/iohk/jormungandrwallet
+
       - name: run java jni tests
         working-directory: ./bindings/wallet-jni/java
         run: ./run_test.py
