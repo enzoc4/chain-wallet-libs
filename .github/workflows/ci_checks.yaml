@@ -166,8 +166,16 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+        if: ${{ matrix.architecture == x86 }}
 
-      - run: ls ./bindings/wallet-jni/java/com/iohk/jormungandrwallet
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: i686-unknown-linux-gnu
+        if: ${{ matrix.architecture == x64 }}
 
-      - name: run java jni tests
-        run: python3 ./bindings/wallet-jni/java/run_test.py
+      - run: python3 ./bindings/wallet-jni/java/run_test.py
+        if: ${{ matrix.architecture == x86 }}
+
+      - run: python3 ./bindings/wallet-jni/java/run_test.py --target i686-unknown-linux-gnu
+        if: ${{ matrix.architecture == x64 }}
