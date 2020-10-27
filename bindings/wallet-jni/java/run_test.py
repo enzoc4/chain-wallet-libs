@@ -42,7 +42,7 @@ def run():
     print(rootdirectory)
     print(dynlibdirectory)
     print(Path(__file__))
-    exit(1)
+    # exit(1)
 
     compile_java_classes()
     compile_jni()
