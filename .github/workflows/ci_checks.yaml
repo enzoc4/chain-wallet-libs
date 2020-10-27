@@ -166,16 +166,16 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-        if: matrix.architecture == 'x86'
+        if: matrix.architecture == 'x64'
 
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: i686-unknown-linux-gnu
-        if: matrix.architecture == 'x64'
-
-      - run: python3 ./bindings/wallet-jni/java/run_test.py
         if: matrix.architecture == 'x86'
 
-      - run: python3 ./bindings/wallet-jni/java/run_test.py --target i686-unknown-linux-gnu
+      - run: python3 ./bindings/wallet-jni/java/run_test.py
         if: matrix.architecture == 'x64'
+
+      - run: python3 ./bindings/wallet-jni/java/run_test.py --target i686-unknown-linux-gnu
+        if: matrix.architecture == 'x86'

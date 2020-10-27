@@ -20,8 +20,6 @@ def compile_java_classes():
     packageFiles = map(str, (
         Path("com/iohk/jormungandrwallet")).glob("*.java"))
 
-    subprocess.run(["ls", "com/iohk/jormungandrwallet"], cwd=scriptdirectory)
-
     out = subprocess.run([
         "javac", "-cp", classpath, "WalletTest.java", *packageFiles], cwd=scriptdirectory)
 
