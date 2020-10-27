@@ -7,7 +7,7 @@ import argparse
 
 scriptdirectory = Path(__file__).parent
 rootdirectory = scriptdirectory.parent.parent.parent
-dynlibdirectory = rootdirectory / "target" / "debug"
+# dynlibdirectory = rootdirectory / "target" / "debug"
 
 junit = "junit-4.13.jar"
 hamcrest = "hamcrest-core-1.3.jar"
@@ -51,6 +51,9 @@ def run():
 
     compile_java_classes()
     compile_jni(args.target)
+
+    dynlibdirectory = rootdirectory / "target" / \
+        (args.target if args.target else ".") / "debug"
 
     out = subprocess.run([
         "java", f"-Djava.library.path={dynlibdirectory.resolve()}", "-cp", classpath, "org.junit.runner.JUnitCore", "WalletTest"
