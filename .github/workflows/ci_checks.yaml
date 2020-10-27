@@ -1,53 +1,128 @@
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - master
+  pull_request:
 
 name: C.I. Checks
 
 jobs:
-  check:
-    name: Check
+  #check:
+  #  name: Check
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - name: Checkout sources
+  #      uses: actions/checkout@v1
+  #      with:
+  #        submodules: true
+
+  #    - name: Install stable toolchain
+  #      uses: actions-rs/toolchain@v1
+  #      with:
+  #        profile: minimal
+  #        toolchain: stable
+  #        override: true
+
+  #    - name: Run cargo check
+  #      uses: actions-rs/cargo@v1
+  #      with:
+  #        command: check
+
+  #test:
+  #  name: Test Suite
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - name: Checkout sources
+  #      uses: actions/checkout@v1
+  #      with:
+  #        submodules: true
+
+  #    - name: Install stable toolchain
+  #      uses: actions-rs/toolchain@v1
+  #      with:
+  #        profile: minimal
+  #        toolchain: stable
+  #        override: true
+
+  #    - name: Run cargo test
+  #      uses: actions-rs/cargo@v1
+  #      continue-on-error: false
+  #      with:
+  #        command: test
+
+  #lints:
+  #  name: Lints
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - name: Checkout sources
+  #      uses: actions/checkout@v1
+  #      with:
+  #        submodules: true
+
+  #    - name: Install stable toolchain
+  #      uses: actions-rs/toolchain@v1
+  #      with:
+  #        profile: minimal
+  #        toolchain: stable
+  #        override: true
+  #        components: rustfmt, clippy
+
+  #    - name: Run cargo fmt
+  #      uses: actions-rs/cargo@v1
+  #      continue-on-error: false
+  #      with:
+  #        command: fmt
+  #        args: --all -- --check
+
+  #    - name: Run cargo clippy
+  #      uses: actions-rs/cargo@v1
+  #      continue-on-error: true # WARNING: only for this example, remove it!
+  #      with:
+  #        command: clippy
+  #        args: -- -D warnings
+
+  # test-wasm:
+  #   name: Wasm-pack test
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout sources
+  #       uses: actions/checkout@v2
+  #       with:
+  #         submodules: true
+
+  #     - name: Install wasm pack
+  #       run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+  #     - name: Test in chrome
+  #       run: wasm-pack test --headless --chrome ./bindings/wallet-js
+
+  #     - name: Test in firefox
+  #       run: wasm-pack test --headless --firefox ./bindings/wallet-js
+
+  eslint-cordova-plugin:
+    name: check eslint for cordova plugin
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
         with:
           submodules: true
 
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
+      - name: setup node
+        uses: actions/setup-node@v1
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
+          node-version: 12.x
 
-      - name: Run cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
+      - name: install dependencies
+        working-directory: ./bindings/wallet-cordova
+        run: npm install
 
-  test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v1
-        with:
-          submodules: true
+      - name: eslint
+        working-directory: ./bindings/wallet-cordova
+        run: npm run eslint
 
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        continue-on-error: false
-        with:
-          command: test
-
-  lints:
-    name: Lints
+  check-c-header:
+    name: check c-header is up-to-date
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -63,34 +138,47 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
-        continue-on-error: false
-        with:
-          command: fmt
-          args: --all -- --check
+      - name: Install cbindgen
+        run: cargo install cbindgen --force
 
-      - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        continue-on-error: true  # WARNING: only for this example, remove it!
-        with:
-          command: clippy
-          args: -- -D warnings
+      - name: run check script
+        run: bash bindings/wallet-c/check_header.sh
 
-  test-wasm:
-    name: Wasm-pack test
+  jni-java-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [8]
+        architecture: [x86, x64]
+    name: Test jni
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v1
         with:
           submodules: true
 
-      - name: Install wasm pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Setup java
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ matrix.java }}
+          architecture: ${{ matrix.architecture }}
 
-      - name: Test in chrome
-        run: wasm-pack test --headless --chrome ./bindings/wallet-js
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+        if: matrix.architecture == 'x64'
 
-      - name: Test in firefox
-        run: wasm-pack test --headless --firefox ./bindings/wallet-js
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: i686-unknown-linux-gnu
+        if: matrix.architecture == 'x86'
+
+      - run: sudo apt install gcc-multilib
+        if: matrix.architecture == 'x86'
+
+      - run: python3 ./bindings/wallet-jni/java/run_test.py
+        if: matrix.architecture == 'x64'
+
+      - run: python3 ./bindings/wallet-jni/java/run_test.py --target i686-unknown-linux-gnu
+        if: matrix.architecture == 'x86'

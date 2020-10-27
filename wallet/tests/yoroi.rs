@@ -1,27 +1,44 @@
+mod utils;
+
+use self::utils::State;
+use chain_impl_mockchain::value::Value;
+use wallet::{transaction::dump_icarus_utxo, RecoveryBuilder};
+
 const BLOCK0: &[u8] = include_bytes!("../../test-vectors/block0");
 const MNEMONICS: &str =
     "neck bulb teach illegal soul cry monitor claw amount boring provide village rival draft stone";
-const WALLET_VALUE: u64 = 1_000_000 + 10_000 + 10_000 + 1 + 100;
-use chain_impl_mockchain::block::Block;
-use chain_ser::mempack::{ReadBuf, Readable as _};
-use wallet::*;
+const WALLET_VALUE: Value = Value(1_000_000 + 10_000 + 10_000 + 1 + 100);
 
 /// test to recover a daedalus style address in the test-vectors block0
 ///
 #[test]
 fn yoroi1() {
-    let mut wallet = RecoveryBuilder::new()
+    let wallet = RecoveryBuilder::new()
         .mnemonics(&bip39::dictionary::ENGLISH, MNEMONICS)
-        .expect("valid mnemonics")
+        .expect("valid mnemonics");
+    let mut yoroi = wallet
         .build_yoroi()
         .expect("recover an Icarus/Yoroi wallet");
+    let account = wallet.build_wallet().expect("recover account");
 
-    let mut block0_bytes = ReadBuf::from(BLOCK0);
-    let block0 = Block::read(&mut block0_bytes).expect("valid block0");
+    let mut state = State::new(BLOCK0);
+    let settings = state.settings().expect("valid initial settings");
+    let address = account.account_id().address(settings.discrimination());
 
-    let _settings = wallet::Settings::new(&block0).expect("valid settings recovering");
-    wallet.check_fragments(block0.contents.iter());
+    assert!(
+        yoroi.check_fragments(state.initial_contents()),
+        "failed to check fragments"
+    );
+    assert_eq!(yoroi.unconfirmed_value(), Some(WALLET_VALUE));
 
-    let total_value = wallet.value_total();
-    assert_eq!(total_value.as_ref(), &WALLET_VALUE);
+    let (fragment, ignored) = dump_icarus_utxo(&settings, &address, &mut yoroi)
+        .next()
+        .unwrap();
+
+    assert!(ignored.len() == 1, "there is only one ignored input");
+    assert!(ignored[0].value() == Value(1), "the value ignored is `1`");
+
+    state
+        .apply_fragments(&[fragment.to_raw()])
+        .expect("the dump fragments should be valid");
 }

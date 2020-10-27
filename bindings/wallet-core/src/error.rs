@@ -44,6 +44,19 @@ pub enum ErrorCode {
     /// an out of bound operation when attempting to access the `nth`
     /// transaction of the conversion.
     WalletConversion = 3,
+
+    /// the provided voting choice is out of the allowed range
+    WalletVoteOutOfRange = 4,
+
+    /// the wallet failed to build a valid transaction, for example
+    /// not enough funds available
+    WalletTransactionBuilding = 5,
+
+    /// error encrypting or decrypting transfer protocol payload
+    SymmetricCipherError = 6,
+
+    /// authentication failed
+    SymmetricCipherInvalidPassword = 7,
 }
 
 #[derive(Debug)]
@@ -61,6 +74,18 @@ pub enum ErrorKind {
     /// the transactions of the wallet conversion. For example,
     /// there may be an out of bound error
     WalletConversion,
+
+    /// the provided voting choice is out of the allowed range
+    WalletVoteOutOfRange,
+
+    /// the wallet failed to build a valid transaction
+    WalletTransactionBuilding,
+
+    /// format error (malformed input, etc...)
+    SymmetricCipherError,
+
+    /// authentication failed
+    SymmetricCipherInvalidPassword,
 }
 
 impl ErrorKind {
@@ -73,6 +98,10 @@ impl ErrorKind {
             Self::InvalidInput { .. } => ErrorCode::InvalidInput,
             Self::WalletRecovering => ErrorCode::WalletRecovering,
             Self::WalletConversion => ErrorCode::WalletConversion,
+            Self::WalletVoteOutOfRange => ErrorCode::WalletVoteOutOfRange,
+            Self::WalletTransactionBuilding => ErrorCode::WalletTransactionBuilding,
+            Self::SymmetricCipherError => ErrorCode::SymmetricCipherError,
+            Self::SymmetricCipherInvalidPassword => ErrorCode::SymmetricCipherInvalidPassword,
         }
     }
 }
@@ -135,6 +164,34 @@ impl Error {
     pub fn wallet_conversion() -> Self {
         Self {
             kind: ErrorKind::WalletConversion,
+            details: None,
+        }
+    }
+
+    pub fn wallet_vote_range() -> Self {
+        Self {
+            kind: ErrorKind::WalletVoteOutOfRange,
+            details: None,
+        }
+    }
+
+    pub fn wallet_transaction() -> Self {
+        Self {
+            kind: ErrorKind::WalletTransactionBuilding,
+            details: None,
+        }
+    }
+
+    pub fn symmetric_cipher_error(err: symmetric_cipher::Error) -> Self {
+        let kind = match err {
+            symmetric_cipher::Error::AuthenticationFailed => {
+                ErrorKind::SymmetricCipherInvalidPassword
+            }
+            _ => ErrorKind::SymmetricCipherError,
+        };
+
+        Self {
+            kind,
             details: None,
         }
     }
@@ -272,6 +329,14 @@ impl Display for ErrorKind {
             Self::WalletConversion => {
                 f.write_str("Error while performing operation on the wallet conversion object")
             }
+            Self::WalletVoteOutOfRange => {
+                f.write_str("The provided choice is out of the vote variants range")
+            }
+            Self::WalletTransactionBuilding => f.write_str(
+                "Failed to build a valid transaction, probably not enough funds available",
+            ),
+            Self::SymmetricCipherError => f.write_str("malformed encryption or decryption payload"),
+            Self::SymmetricCipherInvalidPassword => f.write_str("invalid decryption password"),
         }
     }
 }

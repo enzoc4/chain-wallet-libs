@@ -10,4 +10,9 @@ Thumbs.db
 *.swp
 *.user
 
+src/electron/pkg
+src/android/libs
+src/android/jormungandrwallet
+docs
+
 node_modules

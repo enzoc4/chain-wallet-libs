@@ -1,15 +1,24 @@
 //! This module expose handy C compatible functions to reuse in the different
 //! C style bindings that we have (wallet-c, wallet-jni...)
 
-use crate::{Conversion, Error, Result, Wallet};
-use chain_impl_mockchain::{transaction::Input, value::Value};
+use crate::{Conversion, Error, Proposal, Result, Wallet};
+use chain_impl_mockchain::{
+    certificate::VotePlanId,
+    transaction::Input,
+    value::Value,
+    vote::{Choice, Options as VoteOptions, PayloadType},
+};
+use std::convert::{TryFrom, TryInto};
+
 use thiserror::Error;
 pub use wallet::Settings;
 
 pub type WalletPtr = *mut Wallet;
 pub type SettingsPtr = *mut Settings;
 pub type ConversionPtr = *mut Conversion;
+pub type ProposalPtr = *mut Proposal;
 pub type ErrorPtr = *mut Error;
+pub type PendingTransactionsPtr = *mut PendingTransactions;
 
 #[derive(Debug, Error)]
 #[error("null pointer")]
@@ -18,6 +27,33 @@ struct NulPtr;
 #[derive(Debug, Error)]
 #[error("access out of bound")]
 struct OutOfBound;
+
+/// opaque handle over a list of pending transaction ids
+pub struct PendingTransactions {
+    fragment_ids: Box<[chain_impl_mockchain::fragment::FragmentId]>,
+}
+
+macro_rules! non_null {
+    ( $obj:expr ) => {
+        if let Some(obj) = $obj.as_ref() {
+            obj
+        } else {
+            return Error::invalid_input(stringify!($expr)).with(NulPtr).into();
+        }
+    };
+}
+
+macro_rules! non_null_mut {
+    ( $obj:expr ) => {
+        if let Some(obj) = $obj.as_mut() {
+            obj
+        } else {
+            return Error::invalid_input(stringify!($expr)).with(NulPtr).into();
+        }
+    };
+}
+
+pub const FRAGMENT_ID_LENGTH: usize = 32;
 
 /// retrieve a wallet from the given mnemonics, password and protocol magic
 ///
@@ -77,6 +113,103 @@ pub unsafe fn wallet_recover(
     }
 }
 
+/// recover a wallet from an account and a list of utxo keys
+///
+/// You can also use this function to recover a wallet even after you have
+/// transferred all the funds to the new format (see the _convert_ function)
+///
+/// The recovered wallet will be returned in `wallet_out`.
+///
+/// # parameters
+///
+/// * account_key: the Ed25519 extended key used wallet's account address private key
+///     in the form of a 64 bytes array.  
+/// * utxo_keys: an array of Ed25519 keys in the form of 64 bytes, used as utxo
+///     keys for the wallet
+/// * utxo_keys_len: the number of keys in the utxo_keys array (not the number of bytes)
+/// * wallet_out: the recovered wallet
+///
+/// # Safety
+///
+/// This function dereference raw pointers (password and wallet_out). Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors
+///
+/// # errors
+///
+/// The function may fail if:
+///
+/// * the `wallet_out` is null pointer
+///
+pub unsafe fn wallet_import_keys(
+    account_key: *const u8,
+    utxo_keys: *const [u8; 64],
+    utxo_keys_len: usize,
+    wallet_out: *mut WalletPtr,
+) -> Result {
+    let wallet_out = non_null_mut!(wallet_out);
+    let utxo_keys: &[u8; 64] = non_null!(utxo_keys);
+
+    let account_key: &u8 = non_null!(account_key);
+    let account_key: &[u8] = std::slice::from_raw_parts(account_key as *const u8, 64);
+
+    let utxo_keys: &[[u8; 64]] =
+        std::slice::from_raw_parts(utxo_keys.as_ptr() as *const [u8; 64], utxo_keys_len);
+
+    let result = Wallet::recover_free_keys(account_key, &utxo_keys);
+
+    match result {
+        Ok(wallet) => {
+            *wallet_out = Box::into_raw(Box::new(wallet));
+            Result::success()
+        }
+        Err(err) => err.into(),
+    }
+}
+
+/// get the wallet id
+///
+/// This ID is the identifier to use against the blockchain/explorer to retrieve
+/// the state of the wallet (counter, total value etc...)
+///
+/// # Parameters
+///
+/// * wallet: the recovered wallet (see recover function);
+/// * id_out: a ready allocated pointer to an array of 32bytes. If this array is not
+///   32bytes this may result in a buffer overflow.
+///
+/// # Safety
+///
+/// This function dereference raw pointers (wallet and id_out). Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors
+///
+/// the `id_out` needs to be ready allocated 32bytes memory. If not this will result
+/// in an undefined behavior, in the best scenario it will be a buffer overflow.
+///
+/// # Errors
+///
+/// * this function may fail if the wallet pointer is null;
+///
+pub unsafe fn wallet_id(wallet: WalletPtr, id_out: *mut u8) -> Result {
+    let wallet: &Wallet = if let Some(wallet) = wallet.as_ref() {
+        wallet
+    } else {
+        return Error::invalid_input("wallet").with(NulPtr).into();
+    };
+    if id_out.is_null() {
+        return Error::invalid_input("id_out").with(NulPtr).into();
+    }
+
+    let id = wallet.id();
+
+    let id_out = std::slice::from_raw_parts_mut(id_out, wallet::AccountId::SIZE);
+
+    id_out.copy_from_slice(id.as_ref());
+
+    Result::success()
+}
+
 /// retrieve funds from daedalus or yoroi wallet in the given block0 (or
 /// any other blocks).
 ///
@@ -134,6 +267,123 @@ pub unsafe fn wallet_retrieve_funds(
         }
         Err(err) => err.into(),
     }
+}
+
+///
+/// # Safety
+///
+/// This function dereference raw pointers (wallet, fragment_id). Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors.
+///
+pub unsafe fn pending_transactions_len(
+    transactions: PendingTransactionsPtr,
+    len_out: *mut usize,
+) -> Result {
+    let pending_transactions = non_null!(transactions);
+
+    *len_out = pending_transactions.fragment_ids.len();
+
+    Result::success()
+}
+
+///
+/// # Safety
+///
+/// This function dereference raw pointers (wallet, fragment_id). Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors.
+///
+pub unsafe fn pending_transactions_get(
+    transactions: PendingTransactionsPtr,
+    index: usize,
+    id_out: *mut *const u8,
+) -> Result {
+    let pending_transactions = non_null!(transactions);
+
+    let fragment_id: &[u8] = pending_transactions.fragment_ids[index].as_ref();
+
+    *id_out = fragment_id.as_ptr();
+
+    Result::success()
+}
+
+/// delete the pointer and free the allocated memory
+///
+/// # Safety
+///
+/// This function dereference raw pointers (wallet, fragment_id). Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors.
+///
+pub unsafe fn pending_transactions_delete(pending: PendingTransactionsPtr) {
+    if !pending.is_null() {
+        let boxed = Box::from_raw(pending);
+
+        std::mem::drop(boxed);
+    }
+}
+
+/// Get list of pending transaction id's
+///
+/// # Parameters
+///
+/// * wallet: the recovered wallet (see recover function);
+/// * pending_transactions_out: an opaque type that works as an array
+///
+/// # Errors
+///
+/// * this function may fail if the wallet pointer is null;
+/// * the block is not valid (cannot be decoded)
+///
+/// # Safety
+///
+/// This function dereference raw pointers (wallet). Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors.
+///
+pub unsafe fn wallet_pending_transactions(
+    wallet: WalletPtr,
+    pending_transactions_out: *mut PendingTransactionsPtr,
+) -> Result {
+    let wallet = non_null!(wallet);
+
+    let pending_transactions = PendingTransactions {
+        fragment_ids: wallet
+            .pending_transactions()
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+    };
+
+    *pending_transactions_out =
+        Box::into_raw(Box::new(pending_transactions)) as PendingTransactionsPtr;
+
+    Result::success()
+}
+
+/// Confirm the previously generated transaction identified by fragment_id
+///
+/// # Safety
+///
+/// This function dereference raw pointers (wallet, fragment_id). Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors. It's also asummed that fragment_id is
+/// a pointer to FRAGMENT_ID_LENGTH bytes of contiguous data.
+///
+pub unsafe fn wallet_confirm_transaction(wallet: WalletPtr, fragment_id: *const u8) -> Result {
+    let wallet = non_null_mut!(wallet);
+    let fragment_id: &u8 = non_null!(fragment_id);
+
+    let fragment_id_bytes: [u8; FRAGMENT_ID_LENGTH] =
+        std::slice::from_raw_parts(fragment_id as *const u8, FRAGMENT_ID_LENGTH)
+            .try_into()
+            .unwrap();
+
+    wallet.confirm_transaction(fragment_id_bytes.into());
+
+    Result::success()
 }
 
 /// once funds have been retrieved with `iohk_jormungandr_wallet_retrieve_funds`
@@ -230,8 +480,8 @@ pub unsafe fn wallet_convert_transactions_get(
     };
 
     if let Some(t) = conversion.transactions.get(index) {
-        *transaction_out = t.as_ref().as_ptr();
-        *transaction_size = t.as_ref().len();
+        *transaction_out = t.as_ptr();
+        *transaction_size = t.len();
         Result::success()
     } else {
         Error::wallet_conversion().with(OutOfBound).into()
@@ -342,6 +592,163 @@ pub fn wallet_set_state(wallet: WalletPtr, value: u64, counter: u32) -> Result {
     Result::success()
 }
 
+/// build the proposal object
+///
+/// # Errors
+///
+/// This function may fail if:
+///
+/// * a null pointer was provided as an argument.
+/// * `num_choices` is out of the allowed range.
+///
+/// # Safety
+///
+/// This function dereference raw pointers. Even though the function checks if
+/// the pointers are null. Mind not to put random values in or you may see
+/// unexpected behaviors.
+pub unsafe fn wallet_vote_proposal(
+    vote_plan_id: *const u8,
+    payload_type: PayloadType,
+    index: u8,
+    num_choices: u8,
+    proposal_out: *mut ProposalPtr,
+) -> Result {
+    if vote_plan_id.is_null() {
+        return Error::invalid_input("vote_plan_id").with(NulPtr).into();
+    }
+
+    if proposal_out.is_null() {
+        return Error::invalid_input("proposal_out").with(NulPtr).into();
+    }
+
+    let options = match VoteOptions::new_length(num_choices) {
+        Ok(options) => options,
+        Err(err) => return Error::invalid_input("num_choices").with(err).into(),
+    };
+
+    let vote_plan_id = std::slice::from_raw_parts(vote_plan_id, crate::vote::VOTE_PLAN_ID_LENGTH);
+    let vote_plan_id = match VotePlanId::try_from(vote_plan_id) {
+        Ok(id) => id,
+        Err(err) => return Error::invalid_input("vote_plan_id").with(err).into(),
+    };
+
+    *proposal_out = Box::into_raw(Box::new(Proposal::new(
+        vote_plan_id,
+        payload_type,
+        index,
+        options,
+    )));
+
+    Result::success()
+}
+
+/// build the vote cast transaction
+///
+/// # Errors
+///
+/// This function may fail upon receiving a null pointer or a `choice` value
+/// that does not fall within the range specified in `proposal`.
+///
+/// # Safety
+///
+/// This function dereference raw pointers. Even though the function checks if
+/// the pointers are null. Mind not to put random values in or you may see
+/// unexpected behaviors.
+pub unsafe fn wallet_vote_cast(
+    wallet: WalletPtr,
+    settings: SettingsPtr,
+    proposal: ProposalPtr,
+    choice: u8,
+    transaction_out: *mut *const u8,
+    len_out: *mut usize,
+) -> Result {
+    let wallet = if let Some(wallet) = wallet.as_mut() {
+        wallet
+    } else {
+        return Error::invalid_input("wallet").with(NulPtr).into();
+    };
+
+    let settings = if let Some(settings) = settings.as_ref() {
+        settings.clone()
+    } else {
+        return Error::invalid_input("settings").with(NulPtr).into();
+    };
+
+    let proposal = if let Some(proposal) = proposal.as_ref() {
+        proposal
+    } else {
+        return Error::invalid_input("proposal").with(NulPtr).into();
+    };
+
+    if transaction_out.is_null() {
+        return Error::invalid_input("transaction_out").with(NulPtr).into();
+    }
+    if len_out.is_null() {
+        return Error::invalid_input("len_out").with(NulPtr).into();
+    }
+
+    let choice = Choice::new(choice);
+
+    let transaction = match wallet.vote(settings, proposal, choice) {
+        Ok(transaction) => Box::leak(transaction),
+        Err(err) => return err.into(),
+    };
+
+    *transaction_out = transaction.as_ptr();
+    *len_out = transaction.len();
+
+    Result::success()
+}
+
+/// decrypt payload of the wallet transfer protocol
+///
+/// Parameters
+///
+/// password: byte buffer with the encryption password
+/// password_length: length of the password buffer
+/// ciphertext: byte buffer with the encryption password
+/// ciphertext_length: length of the password buffer
+/// plaintext_out: used to return a pointer to a byte buffer with the decrypted text
+/// plaintext_out_length: used to return the length of decrypted text
+///
+/// The returned buffer is in the heap, so make sure to call the delete_buffer function
+///
+/// # Safety
+///
+/// This function dereference raw pointers. Even though the function checks if
+/// the pointers are null. Mind not to put random values in or you may see
+/// unexpected behaviors.
+pub unsafe fn symmetric_cipher_decrypt(
+    password: *const u8,
+    password_length: usize,
+    ciphertext: *const u8,
+    ciphertext_length: usize,
+    plaintext_out: *mut *const u8,
+    plaintext_out_length: *mut usize,
+) -> Result {
+    let password = non_null!(password);
+    let ciphertext = non_null!(ciphertext);
+
+    let password = std::slice::from_raw_parts(password, password_length);
+    let ciphertext = std::slice::from_raw_parts(ciphertext, ciphertext_length);
+
+    match symmetric_cipher::decrypt(password, ciphertext) {
+        Ok(plaintext) => {
+            let len = plaintext.len();
+            let ptr = Box::into_raw(plaintext);
+
+            let out_len = non_null_mut!(plaintext_out_length);
+            let out = non_null_mut!(plaintext_out);
+
+            *out_len = len;
+            *out = ptr as *const u8;
+
+            Result::success()
+        }
+        Err(err) => Error::symmetric_cipher_error(err).into(),
+    }
+}
+
 /// delete the pointer and free the allocated memory
 pub fn wallet_delete_error(error: ErrorPtr) {
     if !error.is_null() {
@@ -375,5 +782,30 @@ pub fn wallet_delete_conversion(conversion: ConversionPtr) {
         let boxed = unsafe { Box::from_raw(conversion) };
 
         std::mem::drop(boxed);
+    }
+}
+
+/// delete the pointer
+pub fn wallet_delete_proposal(proposal: ProposalPtr) {
+    if !proposal.is_null() {
+        let boxed = unsafe { Box::from_raw(proposal) };
+
+        std::mem::drop(boxed);
+    }
+}
+
+/// Delete a binary buffer that was returned by this library alongside with its
+/// length.
+///
+/// # Safety
+///
+/// This function dereference raw pointers. Even though
+/// the function checks if the pointers are null. Mind not to put random values
+/// in or you may see unexpected behaviors
+pub unsafe fn delete_buffer(ptr: *mut u8, length: usize) {
+    if !ptr.is_null() {
+        let data = std::slice::from_raw_parts_mut(ptr, length);
+        let data = Box::from_raw(data as *mut [u8]);
+        std::mem::drop(data);
     }
 }

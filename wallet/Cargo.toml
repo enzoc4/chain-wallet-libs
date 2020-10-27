@@ -1,6 +1,6 @@
 [package]
 name = "wallet"
-version = "0.2.0"
+version = "0.5.0-pre4"
 authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>", "Vincent Hanquez <vincent@typed.io>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -14,7 +14,9 @@ bip39 = { path = "../bip39" }
 chain-path-derivation = { path = "../chain-path-derivation" }
 hdkeygen = { path = "../hdkeygen" }
 hex = "0.4.2"
+im-rc = "15.0.0"
 
+chain-time = { path = "../chain-deps/chain-time" }
 chain-crypto = { path = "../chain-deps/chain-crypto" }
 chain-addr = { path = "../chain-deps/chain-addr" }
 chain-impl-mockchain = { path = "../chain-deps/chain-impl-mockchain" }

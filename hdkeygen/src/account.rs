@@ -6,9 +6,10 @@
 //! and cannot be be controlled without having an account to group them
 
 use chain_addr::{Address, Discrimination, Kind};
-use chain_crypto::{Ed25519, PublicKey};
-use cryptoxide::ed25519::{self, PUBLIC_KEY_LENGTH};
+use chain_crypto::{AsymmetricKey, Ed25519, Ed25519Extended, PublicKey, SecretKey};
+use cryptoxide::ed25519;
 use std::{
+    convert::TryInto,
     fmt::{self, Display},
     str::FromStr,
 };
@@ -16,29 +17,39 @@ use std::{
 pub use cryptoxide::ed25519::SEED_LENGTH;
 pub type SEED = [u8; SEED_LENGTH];
 
-#[derive(Clone)]
-pub struct Account {
-    seed: SEED,
+pub struct Account<K: AsymmetricKey> {
+    secret: SecretKey<K>,
     counter: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AccountId {
-    id: [u8; PUBLIC_KEY_LENGTH],
+    id: [u8; AccountId::SIZE],
 }
 
-impl Account {
+impl Account<Ed25519> {
+    pub fn from_seed(seed: SEED) -> Self {
+        let secret = SecretKey::<Ed25519>::from_binary(&seed).unwrap();
+        Account { secret, counter: 0 }
+    }
+}
+
+impl Account<Ed25519Extended> {
+    pub fn from_secret_key(key: SecretKey<Ed25519Extended>) -> Self {
+        Account {
+            secret: key,
+            counter: 0,
+        }
+    }
+}
+
+impl<K: AsymmetricKey> Account<K> {
     pub fn account_id(&self) -> AccountId {
         AccountId { id: self.public() }
     }
 
-    pub fn from_seed(seed: SEED) -> Self {
-        Account { seed, counter: 0 }
-    }
-
-    pub fn public(&self) -> [u8; PUBLIC_KEY_LENGTH] {
-        let (_, pk) = ed25519::keypair(&self.seed);
-        pk
+    pub fn public(&self) -> [u8; AccountId::SIZE] {
+        self.secret.to_public().as_ref().try_into().unwrap()
     }
 
     /// get the transaction counter
@@ -59,12 +70,19 @@ impl Account {
         self.counter += atm
     }
 
-    pub fn seed(&self) -> &SEED {
-        &self.seed
+    pub fn secret(&self) -> &SecretKey<K> {
+        &self.secret
     }
+
+    // pub fn seed(&self) -> &SEED {
+    //     &self.seed
+    // }
 }
 
 impl AccountId {
+    /// the total size of an account ID
+    pub const SIZE: usize = ed25519::PUBLIC_KEY_LENGTH;
+
     /// get the public address associated to this account identifier
     pub fn address(&self, discrimination: Discrimination) -> Address {
         let pk = if let Ok(pk) = PublicKey::from_binary(&self.id) {
@@ -78,22 +96,22 @@ impl AccountId {
     }
 }
 
-impl Drop for Account {
-    fn drop(&mut self) {
-        cryptoxide::util::secure_memset(&mut self.seed, 0)
-    }
-}
+// impl Drop for Account {
+//     fn drop(&mut self) {
+//         cryptoxide::util::secure_memset(&mut self.seed, 0)
+//     }
+// }
 
 /* Conversion ************************************************************** */
 
-impl From<[u8; SEED_LENGTH]> for Account {
-    fn from(seed: [u8; SEED_LENGTH]) -> Self {
-        Self { seed, counter: 0 }
-    }
-}
+// impl From<[u8; SEED_LENGTH]> for Account {
+//     fn from(seed: [u8; SEED_LENGTH]) -> Self {
+//         Self { seed, counter: 0 }
+//     }
+// }
 
-impl From<[u8; PUBLIC_KEY_LENGTH]> for AccountId {
-    fn from(id: [u8; PUBLIC_KEY_LENGTH]) -> Self {
+impl From<[u8; Self::SIZE]> for AccountId {
+    fn from(id: [u8; Self::SIZE]) -> Self {
         Self { id }
     }
 }
@@ -108,6 +126,12 @@ impl Into<PublicKey<Ed25519>> for AccountId {
     }
 }
 
+impl AsRef<[u8]> for AccountId {
+    fn as_ref(&self) -> &[u8] {
+        self.id.as_ref()
+    }
+}
+
 /* Display ***************************************************************** */
 
 impl Display for AccountId {
@@ -119,7 +143,7 @@ impl Display for AccountId {
 impl FromStr for AccountId {
     type Err = hex::FromHexError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut id = [0; PUBLIC_KEY_LENGTH];
+        let mut id = [0; Self::SIZE];
 
         hex::decode_to_slice(s, &mut id)?;
 
@@ -132,17 +156,26 @@ mod tests {
     use super::*;
     use quickcheck::{Arbitrary, Gen};
 
-    impl Arbitrary for Account {
+    impl Clone for Account<Ed25519> {
+        fn clone(&self) -> Self {
+            Self {
+                secret: self.secret.clone(),
+                counter: self.counter.clone(),
+            }
+        }
+    }
+
+    impl Arbitrary for Account<Ed25519> {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             let mut seed = [0; SEED_LENGTH];
             g.fill_bytes(&mut seed);
-            Self { seed, counter: 0 }
+            Self::from_seed(seed)
         }
     }
 
     impl Arbitrary for AccountId {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            let mut id = [0; PUBLIC_KEY_LENGTH];
+            let mut id = [0; Self::SIZE];
             g.fill_bytes(&mut id);
             Self { id }
         }
