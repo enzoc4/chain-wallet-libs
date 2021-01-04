@@ -122,9 +122,9 @@ jobs:
         run: |
           if [ ${{ matrix.config.os }} = "windows-latest" ]
           then
-            echo "::set-output name=EXT::zip"
+            echo "::set-output name=ext::zip"
           else
-            echo "::set-output name=EXT::tar.gz"
+            echo "::set-output name=ext::tar.gz"
           fi
         shell: bash
 
@@ -134,7 +134,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.initial_release.outputs.upload_url }}
-          asset_path: chain-wallet-libs-$VERSION-$TARGET.${{ steps.get_file_extension.outputs.EXT }}
+          asset_path: chain-wallet-libs-$VERSION-$TARGET.${{ steps.get_file_extension.outputs.ext }}
           asset_name: chain-wallet-libs-$VERSION-$TARGET
           asset_content_type: application/gzip
 
