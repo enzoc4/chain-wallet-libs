@@ -173,9 +173,9 @@ jobs:
 
       - name: rename-tarball
         run: | 
-        find ./bindings/wallet-js/pkg \
-          -name iohk-jormungandr-wallet-js*.tgz \
-          -exec mv {} chain-wallet-libs-${{ needs.initial_release.outputs.version }}-${{ matrix.target }}.tgz \;
+          find ./bindings/wallet-js/pkg \
+            -name iohk-jormungandr-wallet-js*.tgz \
+            -exec mv {} chain-wallet-libs-${{ needs.initial_release.outputs.version }}-${{ matrix.target }}.tgz \;
 
       - name: Upload binaries to release
         uses: actions/upload-release-asset@v1
