@@ -19,16 +19,27 @@ targets = {
 }
 
 
-def run():
+def run(release=True):
     for rust_target, android_target in targets.items():
-        out = subprocess.run(["cross", "rustc", "--release", "--target",
-                              rust_target, "-p" "wallet-jni", "--", "-C", "lto"])
+        arguments = [
+            "cross",
+            "rustc",
+            "--target",
+            rust_target,
+            "-p",
+            "wallet-jni",
+        ]
+
+        if release:
+            arguments = arguments + ["--release", "--", "-C", "lto"]
+
+        out = subprocess.run(arguments)
 
         if out.returncode != 0:
             print("couldn't build for target: ", rust_target)
             sys.exit(1)
 
-        dst = (script_directory / copy_to / android_target)
+        dst = script_directory / copy_to / android_target
         dst.mkdir(parents=True, exist_ok=True)
 
         src = root_directory / rust_target / "release" / libname
