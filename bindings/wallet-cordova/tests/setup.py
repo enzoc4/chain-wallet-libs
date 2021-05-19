@@ -148,6 +148,6 @@ if __name__ == "__main__":
     if args.command == "tests":
         install_test_plugin(app_dir, reinstall=True)
 
-    subprocess.check_call(["cordova", "build", "--device"], cwd=app_dir)
+    subprocess.check_call(["cordova", "build"], cwd=app_dir)
     if args.run:
         subprocess.check_call(["cordova", "run", args.run], cwd=app_dir)
